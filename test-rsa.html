@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//WAPFORUM//DTD XHTML Mobile 1.0//EN" "http://www.wapforum.org/DTD/xhtml-mobile10.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<meta http-equiv="Pragma" content="no-cache" />
+	<meta http-equiv="Cache-Control" content="no-cache" />
+	<meta http-equiv="Expires" content="-1" />
+	<title></title>
+	<script src="./jsbn.js" type="text/javascript"></script>
+	<script src="./prng4.js" type="text/javascript"></script>
+	<script src="./rng.js" type="text/javascript"></script>
+	<script src="./rsa.js" type="text/javascript"></script>
+	<script type="text/javascript">
+		var SF = {
+			use_read_code: 0, //USE_RAND_CODE	0/1	启用图形验证码
+			error_info: '', 	//ERROR_INFO	string	错误信息
+			hideCert: false, //HideButton	true/false	是否隐藏证书登陆链接
+			allowAnonymousAccess: 0, //ALLOW_ANONYMOUS_ACCESS	0/1	允许匿名登陆
+			denyNormalAccess: 0, //DENY_NORMAL_ACCESS	0/1	所有用户都使用匿名登陆
+			EncryptKey: 'D41F1B452440585C5D1F853C7CBCB2908CFF324B43A42D7D77D2BB28BD64E2D098079B477D23990E935386FF73CCF865E0D84CE64793306C4083EADECFE36BCC89873EC2BA37D6CA943CB03BA5B4369EE7E31C3539DEA67FF8BF4A5CEE64EB3FD0639E78044B12C7B1D07E86EB7BCF033F78947E0ADE5653B9A88B33AFEB53BD',	//RSA_ENCRYPT_KEY	String	RSA加密密钥
+			EncryptExp: '65537',
+			inputName: 'svpn_name',	//用户名输入框名称	string
+			inputPass: 'svpn_password',	//密码输入框名称	string
+			interval: 5000, //每间隔5秒才允许刷新一次图形验证码
+			allowClickImage: false, //是否已以可以刷新图片验证码
+			isIE: function () {
+				return /msie/.test(navigator.userAgent.toLowerCase());
+			},
+			isIOS: function () {	//iPhone, iPod
+				return /ios|iphone|ipod/.test(navigator.userAgent.toLowerCase());
+			},
+			isAndroid: function () {	//android
+				return /android/.test(navigator.userAgent.toLowerCase());
+			},
+			trim: function (str) {	//去除前后空格
+				return String(str).replace(/^\s+|\s+$/g, '');
+			},
+			init: function () {
+				if (SF.isIE()) {	//为IE样式提供兼容
+					document.body.className = 'ie';
+				}
+				if (!SF.allowAnonymousAccess) {
+					SF.$('anonymous').style.display = 'none';
+				}
+				if (SF.hideCert) {
+					SF.$('certArea').style.display = 'none';
+				}
+			},
+			initRand: function () {
+				if (SF.use_read_code) {	//注意，mobile大部分元素不支持onclick事件，请使用<a href="javascript:fn()">来实现兼容
+					SF.$('randWrap').innerHTML = [
+						'<table class="mobile-layout" cellpadding="0" cellspacing="3" style="margin: -3px 0px 0px 0px;">',
+							'<tr>',
+								'<td class="form-title" colspan="2">', tr('验证码：'), '</td>',
+							'</tr>',
+							'<tr>',
+								'<td class="form-control"><input id="rand_code" name="svpn_rand_code" type="text" size="6" maxlength="4" /></td>',
+								'<td><a href="javascript:SF.onClickRand()"><img id="rand_img" src="/por/rand_code.csp" class="rand_img" align="absmiddle"></a></td>',
+							'</tr>',
+						'</table>'
+					].join('');
+					setTimeout(function () { SF.allowClickImage = true; }, SF.interval);
+				}
+			},
+			onClickRand: function () {
+				if (SF.allowClickImage) {
+					SF.allowClickImage = false;
+					SF.$('rand_img').src = ['/por/rand_code.csp?rnd=', Math.random()].join('');
+					setTimeout(function () { SF.allowClickImage = true; }, SF.interval);
+				}
+			},
+			onSubmit: function () {
+				var user = SF.$('user'),
+					pwd = SF.$('pwd'),
+					rand_code = SF.$('rand_code'),
+					form = SF.$('login_form'),
+					url = SF.$('login_form').action,
+					isEncrypt = 1;
+				user.value = SF.trim(user.value);
+				if (user.value.length === 0) {
+					alert(tr("请输入用户名！"));
+					user.focus();
+					user.select();
+					return false;
+				}
+				if (user.value.length > 48) {
+					alert(tr("用户名长度不能超过48个字符！"));
+					user.focus();
+					user.select();
+					return false;
+				}
+				if (pwd.value.length > 48) {
+					alert(tr("密码不可超过48个字节!"));
+					pwd.focus();
+					pwd.select();
+					return false;
+				}
+				if (SF.use_read_code === 1) {
+					if (rand_code.value.length === 0) {
+						alert(tr('验证码不能为空！'));
+						rand_code.focus();
+						rand_code.select();
+						return false;
+					}
+				}
+				SF.delCookie("pwp_tips_again");
+				
+				if(!SF.EncryptKey){
+					//密钥不存在时, 不加密
+					isEncrypt = 0;
+				}else{
+					pwd.value = SF.doEncrypt(pwd.value);
+					console.log(pwd.value);
+					// alert(pwd.value);
+					var cont = document.getElementsByTagName('body');
+					cont[0].innerHTML = pwd.value;
+					// alert(pwd.value);
+					return false;
+				}
+				if(url.indexOf("?") == -1){
+					form.action = url + "?encrypt="+isEncrypt;
+				}else{
+					form.action = url + "&encrypt="+isEncrypt;
+				}
+				return true;
+			},
+			doEncrypt: function (str) {	//M6.8增加密码加密
+				var rsa;
+				rsa = new RSAKey();
+				rsa.setPublic(SF.EncryptKey, parseInt(SF.EncryptExp).toString(16));
+				var res = rsa.encrypt(str);
+				if (res) {
+					return res;
+				}
+				return "";
+			},
+			delCookie: function (name) {
+				var expireTime = new Date();
+				expireTime.setTime(expireTime.getTime() - (365*3600000));
+				document.cookie = name + "=0" +  "; expires=" + expireTime.toGMTString() + ";path=/";
+			},
+			setCookie: function (name, value) {
+				document.cookie = name + "=" + escape(value) + ";path=/";
+			},
+			$: function (id) {
+				return document.getElementById(id);
+			},
+			initPage: function () {
+				if (SF.error_info) {
+					alert(SF.error_info);
+				}
+				SF.setCookie('sms_timeout', '0');	//清除短信认证页面的定时器状态
+				if (SF.allowAnonymousAccess === 1 && SF.denyNormalAccess === 1) {
+					window.location = ['/por/login_psw.csp?', SF.inputName, '=Anonymous&', SF.inputPass, '='].join('');
+				}
+				if (SF.use_read_code) {	//如果启用图形验证码，需要启动心跳
+					document.write('<script type="text/javascript" src="/com/ajax_req.js"><\/script>');
+				}
+			}
+		}
+		SF.initPage();
+	</script>
+</head>
+<body>
+	<form id="login_form" class="mobile-form" onsubmit="return SF.onSubmit();" method="post">
+		<div class="mobile-wrap">
+			<table class="mobile-layout" cellpadding="0" cellspacing="3">
+				<tr>
+					<td class="form-title"><label for="user" _html="用户名："></label></td>
+				</tr>
+				<tr>
+					<td class="form-control"><input id="user" name="svpn_name" type="text" maxlength="48" /></td>
+				</tr>
+				<tr>
+					<td class="form-title" _html="密码："></td>
+				</tr>
+				<tr>
+					<td class="form-control"><input id="pwd" name="svpn_password" type="password" maxlength="48" /></td>
+				</tr>
+			</table>
+			<div id="randWrap"></div>
+			<script type="text/javascript">
+				SF.initRand();	//使用document.write加快显示速度，避免用户看到界面变动
+			</script>
+			<table class="mobile-layout" cellpadding="0" cellspacing="3" style="margin: -3px 0px 0px 0px;">
+				<tr>
+					<td class="form-button">
+						<table cellpadding="0" cellspacing="0">
+							<tr>
+								<td><button type="submit" _html="登 录"></button></td>
+								<td><a id="anonymous" class="link" href="/por/login_psw.csp?svpn_name=Anonymous&svpn_password=" _html="匿名登录"></a></td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+			</table>
+		</div>
+	</form>
+</body>
+</html>
